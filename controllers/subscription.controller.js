@@ -15,7 +15,7 @@ export const createSubscription = async (req, res, next) => {
         
         try {
             await workflowClient.trigger({
-                url: `http://127.0.0.1:8080/v2/publish/https://localhost:5500/api/v1/workflows/subscription/reminder -H "Authorization: Bearer eyJVc2VySUQiOiJkZWZhdWx0VXNlciIsIlBhc3N3b3JkIjoiZGVmYXVsdFBhc3N3b3JkIn0="`,
+                url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
                 body: subscription.id,
                 headers: {
                     "Content-type": "application/json"
