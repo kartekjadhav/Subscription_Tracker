@@ -5,6 +5,7 @@ import Subscription from '../models/subscription.model.js';
 import dayjs from 'dayjs';
 import sendEmailReminder from '../utils/send-email.js';
 
+const reminderDays = [10, 7, 5, 3, 1];
 export const sendReminders = serve(async(context) => {
     const { subscriptionId } = context.requestPayload;
     const subscription = await fetchSubscription(context, subscriptionId);
@@ -19,19 +20,16 @@ export const sendReminders = serve(async(context) => {
         return;
     }
 
-    const reminderDays = [10, 7, 5, 3, 1];
-
     for(const remDay of reminderDays) {
         const reminderDate = renewalDate.subtract(remDay, 'day');
 
         let label = `Reminder before ${reminderDate} days`
+
         if(reminderDate.isAfter(dayjs())) {
             await sleepUntilReminder(context, label, reminderDate);
         }
 
-        if(dayjs().isSame(reminderDate, 'day')){
-            console.log('triggered');
-            
+        if(dayjs().isSame(reminderDate, 'day')){            
             await triggerReminder(context, label, remDay, subscription);
         }
     }
@@ -39,7 +37,7 @@ export const sendReminders = serve(async(context) => {
 
 async function fetchSubscription(context, subscriptionId) {
     return await context.run('get subscription', async() => {
-        return await Subscription.findById(subscriptionId).populate({path: 'user', select: 'name, email'});
+        return await Subscription.findById(subscriptionId).populate('user', 'name, email');
     })
 }
 
@@ -50,7 +48,7 @@ async function sleepUntilReminder(context, label, date) {
 
 async function triggerReminder(context, label, remDay, subscription) {
     return await context.run(label, async() => {
-        console.log("Triggering reminder");
+        console.log(`Triggering ${label} reminder`);
         await sendEmailReminder(subscription.user.email, remDay, subscription);
     })
 }
