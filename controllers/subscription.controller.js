@@ -1,43 +1,24 @@
-import mongoose from 'mongoose';
 import Subscription from "../models/subscription.model.js";
 import { workflowClient } from '../config/upstash.js';
 import { SERVER_URL } from '../config/env.js';
 
-export const createSubscription = async (req, res, next) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    
-    try {
-        const subscription = await Subscription.create([{
+export const createSubscription = async (req, res) => {
+        const subscription = await Subscription.create({
             ...req.body,
             user: req.user._id
-        }], {session});
+        });
         
-        try {
-            await workflowClient.trigger({
-                url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
-                body: subscription.id,
-                headers: {
-                    "Content-type": "application/json"
-                },
-                retries: 0
-            });
-            console.log(`Workflow triggered successfully for subscription: ${subscription.id}`);
-        } catch (workflowError) {
-            console.error("Failed to trigger workflow:", workflowError);
-            // Don't fail the subscription creation if workflow fails
-        }
+        const { workflowRunId } = await workflowClient.trigger({
+            url: `${SERVER_URL}/api/v1/workflows/subscription/reminder`,
+            headers: {
+                'Content-type': 'application/json'
+            },
+            body: {
+                subscriptionId: subscription.id
+            }
+        })
 
-        res.status(201).json({success: true, message: "Subscription create successfully", data: subscription});
-        
-        await session.commitTransaction();
-        await session.endSession();
-    } catch (error) {
-        await session.abortTransaction();
-        await session.endSession();
-        console.log("Error while creating subscription", error);
-        next(error);
-    }
+        res.status(201).json({success: true, message: "Subscription create successfully", data: {subscription: subscription.id, workflowRunId}});
 };
 
 export const getUserSubscription = async (req, res, next) => {

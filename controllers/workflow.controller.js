@@ -1,52 +1,56 @@
-import { createRequire } from 'module'
-import dayjs from 'dayjs';
+import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-const { serve } =  require("@upstash/workflow/express");
-
+const { serve } = require('@upstash/workflow/express');
 import Subscription from '../models/subscription.model.js';
+import dayjs from 'dayjs';
+import sendEmailReminder from '../utils/send-email.js';
 
 export const sendReminders = serve(async(context) => {
-    console.log("Workflow endpoint called with payload:", context.requestPayload);
-    const subscriptionId = context.requestPayload;
+    const { subscriptionId } = context.requestPayload;
     const subscription = await fetchSubscription(context, subscriptionId);
 
-    if (!subscription || subscription.status !== "active") return;
+    if(!subscription || subscription.status !== 'active') return;
 
     const renewalDate = dayjs(subscription.renewalDate);
 
-    if(renewalDate.isBefore(dayjs())) {
-        console.log(`The renewal date of subscription ${subscriptionId} has been passed. Stopping workflow`);
+    //If renewl date has already passed
+    if (renewalDate.isBefore(dayjs())){
+        console.log(`Renewal date of subscription id ${subscriptionId} has already been passed`);
         return;
     }
 
-    const remainderDays = [10, 7, 5, 3, 1];
+    const reminderDays = [10, 7, 5, 3, 1];
 
-    for (const remDays of remainderDays) {
-        const reminderDate = renewalDate.subtract(remDays, 'day');
+    for(const remDay of reminderDays) {
+        const reminderDate = renewalDate.subtract(remDay, 'day');
 
-        if(reminderDate.isAfter(dayjs())){
-            await sleepUntilReminder(context, `Reminder ${remDays} before`, reminderDate);
+        let label = `Reminder before ${reminderDate} days`
+        if(reminderDate.isAfter(dayjs())) {
+            await sleepUntilReminder(context, label, reminderDate);
         }
 
-        await triggerReminder(context, `Reminder ${remDays} before`);
+        if(dayjs().isSame(reminderDate, 'day')){
+            console.log('triggered');
+            
+            await triggerReminder(context, label, remDay, subscription);
+        }
     }
-
 });
 
 async function fetchSubscription(context, subscriptionId) {
-    return await context.run("get subscription", async () => {
-        return await Subscription.findById(subscriptionId).populate('user', 'name email');
+    return await context.run('get subscription', async() => {
+        return await Subscription.findById(subscriptionId).populate({path: 'user', select: 'name, email'});
     })
 }
 
-async function sleepUntilReminder(context, label, date){
-    console.log(`Sleeping until ${label} reminder at ${label}`);
-    await context.sleep(label, date.toDate()); 
-}
+async function sleepUntilReminder(context, label, date) {
+    console.log(`Sleeping until ${label} until ${date}`);
+    await context.sleepUntil(label, date.toDate());
+};
 
-async function triggerReminder(context, label) {
-    return await context.run(label, async () => {
+async function triggerReminder(context, label, remDay, subscription) {
+    return await context.run(label, async() => {
         console.log("Triggering reminder");
-        //Email SMS
-     });
+        await sendEmailReminder(subscription.user.email, remDay, subscription);
+    })
 }
